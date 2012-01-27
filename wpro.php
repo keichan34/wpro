@@ -124,4 +124,35 @@ function wpro_wp_generate_attachment_metadata($data) {
 	return $data;
 }
 
+add_filter('load_image_to_edit_path', 'wpro_load_image_to_edit_path');
+function wpro_load_image_to_edit_path($filepath) {
+	if (substr($filepath, 0, 7) == 'http://') {
 
+		$ending = '';
+		if (preg_match('/\.([^\.\/]+)$/', $filepath, $regs)) $ending = '.' . $regs[1];
+
+		$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
+		while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
+
+		// Kombinationen cURL och S3 hanterar inte nationella tecken i URL:er, därför:
+		$filepath = explode('/', $filepath);
+		foreach ($filepath as $key => $val) {
+			$filepath[$key] = urlencode($val);
+		}
+		$filepath = str_replace('%3A', ':', join('/', $filepath));
+
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $filepath);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		curl_setopt($ch, CURLOPT_AUTOREFERER, true);
+
+		$fh = fopen($tmpfile, 'w');
+		fwrite($fh, curl_exec($ch));
+		fclose($fh);
+
+		return $tmpfile;
+
+	}
+	return $filepath;
+}
