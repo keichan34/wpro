@@ -156,3 +156,33 @@ function wpro_load_image_to_edit_path($filepath) {
 	}
 	return $filepath;
 }
+
+add_filter('wp_save_image_file', 'wpro_wp_save_image_file', 10, 5);
+function wpro_wp_save_image_file($dummy, $filename, $image, $mime_type, $post_id) {
+
+	if (!substr($filename, 0, strlen(wpro_get_temp_dir())) == wpro_get_temp_dir()) return false;
+	$filename = substr($filename, strlen(wpro_get_temp_dir()));
+	if (!preg_match('/^wpro[0-9]+(\/.+)$/', $filename, $regs)) return false;
+
+	$filename = $regs[1];
+
+	$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
+	while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
+
+	switch ( $mime_type ) {
+		case 'image/jpeg':
+			imagejpeg( $image, $tmpfile, apply_filters( 'jpeg_quality', 90, 'edit_image' ) );
+			break;
+		case 'image/png':
+			imagepng($image, $tmpfile);
+			break;
+		case 'image/gif':
+			imagegif($image, $tmpfile);
+			break;
+		default:
+			return false;
+	}
+
+	return wpro_upload_file_to_s3($tmpfile, 'http://' . get_option('aws-bucket') . $filename);
+}
+
