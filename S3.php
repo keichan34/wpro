@@ -418,17 +418,18 @@ class S3
 	* Create input info array for putObject()
 	*
 	* @param string $file Input file
+	* @param string $mime Mime type
 	* @param mixed $md5sum Use MD5 hash (supply a string if you want to use your own)
 	* @return array | false
 	*/
-	public static function inputFile($file, $md5sum = true)
+	public static function inputFile($file, $md5sum = true, $mime = 'application/octet-stream')
 	{
 		if (!file_exists($file) || !is_file($file) || !is_readable($file))
 		{
 			self::__triggerError('S3::inputFile(): Unable to open input file: '.$file, __FILE__, __LINE__);
 			return false;
 		}
-		return array('file' => $file, 'size' => filesize($file), 'md5sum' => $md5sum !== false ?
+		return array('file' => $file, 'mime' => $mime, 'size' => filesize($file), 'md5sum' => $md5sum !== false ?
 		(is_string($md5sum) ? $md5sum : base64_encode(md5_file($file, true))) : '');
 	}
 
@@ -501,7 +502,7 @@ class S3
 			$input['type'] = $requestHeaders;
 
 		// Content-Type
-		if (!isset($input['type']))
+		if (!isset($input['type']) || $input['type'] == '')
 		{
 			if (isset($requestHeaders['Content-Type']))
 				$input['type'] =& $requestHeaders['Content-Type'];

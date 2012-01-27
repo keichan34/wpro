@@ -96,7 +96,7 @@ function wpro_upload_dir($data) {
 	return $data;
 }
 
-function wpro_upload_file_to_s3($file, $fullurl) {
+function wpro_upload_file_to_s3($file, $fullurl, $mime) {
 	if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $fullurl, $regs)) return false;
 
 	$fullurl = wpro_url_normalizer($fullurl);
@@ -107,7 +107,7 @@ function wpro_upload_file_to_s3($file, $fullurl) {
 	if (!file_exists($file)) return false;
 
 	$s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
-	$r = $s3->putObject($s3->inputFile($file, false), $bucket, $url, S3::ACL_PUBLIC_READ);
+	$r = $s3->putObject($s3->inputFile($file, false, $mime), $bucket, $url, S3::ACL_PUBLIC_READ);
 
 	if ($r) {
 		$GLOBALS['wpro_already_uploaded_in_this_request'][] = $fullurl;
@@ -126,7 +126,7 @@ function wpro_wp_handle_upload($data) {
 
 	if (!file_exists($data['file'])) return false;
 
-	$response = wpro_upload_file_to_s3($data['file'], $data['url']);
+	$response = wpro_upload_file_to_s3($data['file'], $data['url'], $data['type']);
 	if (!$response) return false;
 
 	return $data;
@@ -140,7 +140,21 @@ function wpro_wp_generate_attachment_metadata($data) {
 	foreach ($data['sizes'] as $size => $sizedata) {
 		$file = $filepath . '/' . $sizedata['file'];
 		$url = $upload_dir['baseurl'] . substr($file, strlen($upload_dir['basedir']));
-		wpro_upload_file_to_s3($file, $url);
+
+		$mime = 'application/octet-stream';
+		switch(substr($file, -4)) {
+			case '.gif':
+				$mime = 'image/gif';
+				break;
+			case '.jpg':
+				$mime = 'image/jpeg';
+				break;
+			case '.png':
+				$mime = 'image/png';
+				break;
+		}
+
+		wpro_upload_file_to_s3($file, $url, $mime);
 	}
 
 	return $data;
@@ -207,21 +221,25 @@ function wpro_wp_save_image_file($dummy, $filename, $image, $mime_type, $post_id
 			return false;
 	}
 
-	return wpro_upload_file_to_s3($tmpfile, 'http://' . get_option('aws-bucket') . $filename);
+	return wpro_upload_file_to_s3($tmpfile, 'http://' . get_option('aws-bucket') . $filename, $mime_type);
 }
 
 // Filter for handling XMLRPC uploads:
 add_filter('wp_upload_bits', 'wpro_wp_upload_bits');
 function wpro_wp_upload_bits($data) {
-	$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
-	while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
+
+	$ending = '';
+	if (preg_match('/\.([^\.\/]+)$/', $data['name'], $regs)) $ending = '.' . $regs[1];
+
+	$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
+	while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
 
 	$fh = fopen($tmpfile, 'wb');
 	fwrite($fh, $data['bits']);
 	fclose($fh);
 
 	$upload = wp_upload_dir();
-	wpro_upload_file_to_s3($tmpfile, $upload['url'] . '/' . $data['name']);
+	wpro_upload_file_to_s3($tmpfile, $upload['url'] . '/' . $data['name'], '');
 
 	return array(
 		'file' => $tmpfile,
