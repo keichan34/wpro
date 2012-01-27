@@ -11,6 +11,9 @@ License: This code (except for the S3.php file) is (un)licensed under the kopimi
 
 require_once('S3.php');
 
+// XMLRPC uploading requires this check, since wordpress will try to upload stuff twice (but only the first time with all parameters in a proper way):
+$GLOBALS['wpro_already_uploaded_in_this_request'] = array();
+
 // Register the settings:
 add_action ('admin_init', 'init_wpro_admin');
 function init_wpro_admin() {
@@ -93,26 +96,45 @@ function wpro_upload_dir($data) {
 	return $data;
 }
 
-function wpro_upload_file_to_s3($file, $url) {
-	if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $url, $regs)) return false;
+function wpro_upload_file_to_s3($file, $fullurl) {
+	if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $fullurl, $regs)) return false;
+
+	$fullurl = wpro_url_normalizer($fullurl);
 
 	$bucket = $regs[1];
 	$url = $regs[2];
 
-	$s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
+	if (!file_exists($file)) return false;
 
-	return $s3->putObject($s3->inputFile($file, false), $bucket, $url, S3::ACL_PUBLIC_READ);
+	$s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
+	$r = $s3->putObject($s3->inputFile($file, false), $bucket, $url, S3::ACL_PUBLIC_READ);
+
+	if ($r) {
+		$GLOBALS['wpro_already_uploaded_in_this_request'][] = $fullurl;
+	}
+
+	return $r;
 }
 
 function wpro_wp_handle_upload($data) {
+
+	$data['url'] = wpro_url_normalizer($data['url']);
+
+	// This is a XMLRPC workaround:
+	// If we already uploaded this file in this request: Pretend like everything is fine...
+	if (in_array($data['url'], $GLOBALS['wpro_already_uploaded_in_this_request'])) return $data;
+
+	if (!file_exists($data['file'])) return false;
+
 	$response = wpro_upload_file_to_s3($data['file'], $data['url']);
-	if ($response !== true) {
-		return false;
-	}
+	if (!$response) return false;
+
 	return $data;
 }
 
 function wpro_wp_generate_attachment_metadata($data) {
+	if (!is_array($data) || !isset($data['sizes']) || !is_array($data['sizes'])) return $data;
+
 	$upload_dir = wp_upload_dir();
 	$filepath = $upload_dir['basedir'] . '/' . preg_replace('/^(.+)\/[^\/]+$/', '\\1', $data['file']);
 	foreach ($data['sizes'] as $size => $sizedata) {
@@ -122,6 +144,13 @@ function wpro_wp_generate_attachment_metadata($data) {
 	}
 
 	return $data;
+}
+
+function wpro_url_normalizer($url) {
+	if (strpos($url, '%') !== false) return $url;
+	$url = explode('/', $url);
+	foreach ($url as $key => $val) $url[$key] = urlencode($val);
+	return str_replace('%3A', ':', join('/', $url));
 }
 
 add_filter('load_image_to_edit_path', 'wpro_load_image_to_edit_path');
@@ -134,12 +163,7 @@ function wpro_load_image_to_edit_path($filepath) {
 		$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
 		while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999) . $ending;
 
-		// Kombinationen cURL och S3 hanterar inte nationella tecken i URL:er, därför:
-		$filepath = explode('/', $filepath);
-		foreach ($filepath as $key => $val) {
-			$filepath[$key] = urlencode($val);
-		}
-		$filepath = str_replace('%3A', ':', join('/', $filepath));
+		$filepath = wpro_url_normalizer($filepath);
 
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $filepath);
@@ -186,3 +210,22 @@ function wpro_wp_save_image_file($dummy, $filename, $image, $mime_type, $post_id
 	return wpro_upload_file_to_s3($tmpfile, 'http://' . get_option('aws-bucket') . $filename);
 }
 
+// Filter for handling XMLRPC uploads:
+add_filter('wp_upload_bits', 'wpro_wp_upload_bits');
+function wpro_wp_upload_bits($data) {
+	$tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
+	while (file_exists($tmpfile)) $tmpfile = wpro_get_temp_dir() . 'wpro' . time() . rand(0, 999999);
+
+	$fh = fopen($tmpfile, 'wb');
+	fwrite($fh, $data['bits']);
+	fclose($fh);
+
+	$upload = wp_upload_dir();
+	wpro_upload_file_to_s3($tmpfile, $upload['url'] . '/' . $data['name']);
+
+	return array(
+		'file' => $tmpfile,
+		'url' => wpro_url_normalizer($upload['url'] . '/' . $data['name']),
+		'error' => false
+	);
+}
