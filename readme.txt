@@ -1,4 +1,4 @@
-=== Cursorial ===
+=== Wordpress Read-Only ===
 
 * Contributors: alfreddatakillen
 * Tags: wordpress, amazon, s3, readonly
