@@ -6,7 +6,7 @@ Description: Plugin for binaries (images, media, uploads) on read-only Wordpress
 Version: 0.1
 Author: Alfred
 Author URI: http://klandestino.se/
-License: This code (except for the S3.php file) is (un)licensed under the kopimi (copyme) non-license; http://www.kopimi.com. In other words you are free to copy it, taunt it, share it, fork it or whatever. :) 
+License: Beerware / Kopimi  
  */
 
 require_once('S3.php');
