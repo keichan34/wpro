@@ -56,7 +56,30 @@ function generate_wpro_admin_form () {
 					</tr>
 					<tr>
 						<th><label for="aws-endpoint">AWS Endpoint</label></th> 
-						<td><input name="aws-endpoint" id="aws-endpoint" type="text" value="<?php echo get_option('aws-endpoint'); ?>" class="regular-text code" /></td>
+						<td>
+							<select name="aws-endpoint" id="aws-endpoint">
+								<?php
+									$aws_regions = array(
+										's3.amazonaws.com' => 'US East Region (Standard)',
+										's3-us-west-2.amazonaws.com' => 'US West (Oregon) Region',
+										's3-us-west-1.amazonaws.com' => 'US West (Northern California) Region',
+										's3-eu-west-1.amazonaws.com' => 'EU (Ireland) Region',
+										's3-ap-southeast-1.amazonaws.com' => 'Asia Pacific (Singapore) Region',
+										's3-ap-northeast-1.amazonaws.com' => 'Asia Pacific (Tokyo) Region',
+										's3-sa-east-1.amazonaws.com' => 'South America (Sao Paulo) Region'
+									);
+									// Endpoints comes from http://docs.amazonwebservices.com/general/latest/gr/rande.html
+
+									foreach ($aws_regions as $endpoint => $endpoint_name) {
+										echo ('<option value="' . $endpoint . '"');
+										if ($endpoint == get_option('aws-endpoint')) {
+											echo(' selected="selected"');
+										}
+										echo ('>' . $endpoint_name . '</option>');
+									}
+								?>
+							</select> 
+						</td>
 					</tr>
 				</table>
 				<p class="submit"> 
