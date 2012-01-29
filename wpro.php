@@ -11,9 +11,6 @@ License: This code (except for the S3.php file) is (un)licensed under the kopimi
 
 require_once('S3.php');
 
-// XMLRPC uploading requires this check, since wordpress will try to upload stuff twice (but only the first time with all parameters in a proper way):
-$GLOBALS['wpro_already_uploaded_in_this_request'] = array();
-
 // Register the settings:
 add_action ('admin_init', 'init_wpro_admin');
 function init_wpro_admin() {
@@ -109,20 +106,19 @@ function wpro_upload_file_to_s3($file, $fullurl, $mime) {
 	$s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
 	$r = $s3->putObject($s3->inputFile($file, false, $mime), $bucket, $url, S3::ACL_PUBLIC_READ);
 
-	if ($r) {
-		$GLOBALS['wpro_already_uploaded_in_this_request'][] = $fullurl;
-	}
-
 	return $r;
+}
+function wpro_file_exists_on_s3($path) {
+	$path = wpro_url_normalizer($path);
+	$s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
+	$r = $s3->getObjectInfo(get_option('aws-bucket'), $path);
+	if (is_array($r)) return true;
+	return false;
 }
 
 function wpro_wp_handle_upload($data) {
 
 	$data['url'] = wpro_url_normalizer($data['url']);
-
-	// This is a XMLRPC workaround:
-	// If we already uploaded this file in this request: Pretend like everything is fine...
-	if (in_array($data['url'], $GLOBALS['wpro_already_uploaded_in_this_request'])) return $data;
 
 	if (!file_exists($data['file'])) return false;
 
@@ -239,11 +235,38 @@ function wpro_wp_upload_bits($data) {
 	fclose($fh);
 
 	$upload = wp_upload_dir();
-	wpro_upload_file_to_s3($tmpfile, $upload['url'] . '/' . $data['name'], '');
 
 	return array(
 		'file' => $tmpfile,
 		'url' => wpro_url_normalizer($upload['url'] . '/' . $data['name']),
 		'error' => false
 	);
+}
+
+// Handle duplicate filenames:
+// Wordpress never calls the wp_handle_upload_overrides filter properly, so we do not have any good way of setting a callback for wpro_unique_filename_callback, which would be the most beautiful way of doing this. So, instead we are usting the wpro_handle_upload_prefilter to check for duplicates and rename the files...
+add_filter('wp_handle_upload_prefilter', 'wpro_handle_upload_prefilter');
+function wpro_handle_upload_prefilter($file) {
+
+	$upload = wp_upload_dir();
+
+	$name = $file['name'];
+	$path = trim($upload['subdir'], '/') . '/' . $name;
+
+	$counter = 0;
+	while (wpro_file_exists_on_s3($path)) {
+		if (preg_match('/\.([^\.\/]+)$/', $file['name'], $regs)) {
+			$ending = '.' . $regs[1];
+			$preending = substr($file['name'], 0, 0 - strlen($ending));
+			$name = $preending . '_' . $counter . $ending;
+		} else {
+			$name = $file['name'] . '_' . $counter;
+		}
+		$path = trim($upload['subdir'], '/') . '/' . $name;
+		$counter++;
+	}
+
+	$file['name'] = $name;
+
+	return $file;
 }
