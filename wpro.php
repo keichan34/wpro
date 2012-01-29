@@ -43,6 +43,13 @@ function generate_wpro_admin_form () {
 				<h3><?php echo __('Common Settings'); ?></h3>
 				<table class="form-table">
 					<tr>
+						<th><label for="upload-destination">Upload Storage</th>
+						<td><input name="upload-destination" id="upload-destination" type="radio" value="s3" checked="checked"/> Amazon AWS S3</td>
+					</tr>
+				</table>
+				<h3><?php echo __('Amazon AWS S3 Settings'); ?></h3>
+				<table class="form-table">
+					<tr>
 						<th><label for="aws-key">AWS Key</label></th> 
 						<td><input name="aws-key" id="aws-key" type="text" value="<?php echo get_option('aws-key'); ?>" class="regular-text code" /></td>
 					</tr>
