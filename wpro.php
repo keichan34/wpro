@@ -54,12 +54,12 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 	public $endpoint;
 
 	function __construct() {
-		$this->key = get_option('aws-key');
-		$this->secret = get_option('aws-secret');
-		$this->bucket = get_option('aws-bucket');
-		$this->endpoint = get_option('aws-endpoint');
+		$this->key = get_option('wpro-aws-key');
+		$this->secret = get_option('wpro-aws-secret');
+		$this->bucket = get_option('wpro-aws-bucket');
+		$this->endpoint = get_option('wpro-aws-endpoint');
 
-		$this->s3 = new S3(get_option('aws-key'), get_option('aws-secret'), false, get_option('aws-endpoint'));
+		$this->s3 = new S3(get_option('wpro-aws-key'), get_option('wpro-aws-secret'), false, get_option('wpro-aws-endpoint'));
 	}
 
 	function upload($file, $fullurl, $mime) {
@@ -124,14 +124,18 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 	* * * * * * * * * * * * * * * * * * * * * * */
 
 	function admin_init() {
-		register_setting('wpro-settings-group', 'aws-key');
-		register_setting('wpro-settings-group', 'aws-secret');
-		register_setting('wpro-settings-group', 'aws-bucket');
-		register_setting('wpro-settings-group', 'aws-endpoint');
-		add_option('aws-key');
-		add_option('aws-secret');
-		add_option('aws-bucket');
-		add_option('aws-endpoint');
+		register_setting('wpro-settings-group', 'wpro-aws-key');
+		register_setting('wpro-settings-group', 'wpro-aws-secret');
+		register_setting('wpro-settings-group', 'wpro-aws-bucket');
+		register_setting('wpro-settings-group', 'wpro-aws-virthost');
+		register_setting('wpro-settings-group', 'wpro-aws-folder');
+		register_setting('wpro-settings-group', 'wpro-aws-endpoint');
+		add_option('wpro-aws-key');
+		add_option('wpro-aws-secret');
+		add_option('wpro-aws-bucket');
+		add_option('wpro-aws-virthost');
+		add_option('wpro-aws-folder');
+		add_option('wpro-aws-endpoint');
 	}
 
 
@@ -157,27 +161,34 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 					<table class="form-table">
 						<tr>
 							<th><label for="upload-destination">Upload Storage</th>
-							<td><input name="upload-destination" id="upload-destination" type="radio" value="s3" checked="checked"/> Amazon AWS S3</td>
+							<td><input name="upload-destination" id="upload-destination" type="radio" value="s3" checked="checked"/> Amazon S3</td>
 						</tr>
 					</table>
-					<h3><?php echo __('Amazon AWS S3 Settings'); ?></h3>
+					<h3><?php echo __('Amazon S3 Settings'); ?></h3>
 					<table class="form-table">
 						<tr>
-							<th><label for="aws-key">AWS Key</label></th> 
-							<td><input name="aws-key" id="aws-key" type="text" value="<?php echo get_option('aws-key'); ?>" class="regular-text code" /></td>
+							<th><label for="wpro-aws-key">AWS Key</label></th> 
+							<td><input name="wpro-aws-key" id="wpro-aws-key" type="text" value="<?php echo get_option('wpro-aws-key'); ?>" class="regular-text code" /></td>
 						</tr>
 						<tr>
-							<th><label for="aws-secret">AWS Secret</label></th> 
-							<td><input name="aws-secret" id="aws-secret" type="text" value="<?php echo get_option('aws-secret'); ?>" class="regular-text code" /></td>
+							<th><label for="wpro-aws-secret">AWS Secret</label></th> 
+							<td><input name="wpro-aws-secret" id="wpro-aws-secret" type="text" value="<?php echo get_option('wpro-aws-secret'); ?>" class="regular-text code" /></td>
 						</tr>
 						<tr>
-							<th><label for="aws-bucket">AWS Bucket</label></th> 
-							<td><input name="aws-bucket" id="aws-bucket" type="text" value="<?php echo get_option('aws-bucket'); ?>" class="regular-text code" /></td>
-						</tr>
-						<tr>
-							<th><label for="aws-endpoint">AWS Endpoint</label></th> 
+							<th><label for="wpro-aws-bucket">S3 Bucket</label></th> 
 							<td>
-								<select name="aws-endpoint" id="aws-endpoint">
+								<input name="wpro-aws-bucket" id="wpro-aws-bucket" type="text" value="<?php echo get_option('wpro-aws-bucket'); ?>" class="regular-text code" /><br />
+								<input name="wpro-aws-virthost" id="wpro-aws-virthost" type="checkbox" value="1"  <?php if (get_option('wpro-aws-virthost')) echo('checked="checked"'); ?> /> Virtual hosting is enabled for this bucket.
+							</td>
+						</tr>
+						<tr>
+							<th><label for="wpro-aws-folder">Bucket Folder</label></th> 
+							<td><input name="wpro-aws-folder" id="wpro-aws-folder" type="text" value="<?php echo get_option('wpro-aws-folder'); ?>" class="regular-text code" /></td>
+						</tr>
+						<tr>
+							<th><label for="wpro-aws-endpoint">Bucket AWS Region</label></th> 
+							<td>
+								<select name="wpro-aws-endpoint" id="wpro-aws-endpoint">
 									<?php
 										$aws_regions = array(
 											's3.amazonaws.com' => 'US East Region (Standard)',
@@ -192,7 +203,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 
 										foreach ($aws_regions as $endpoint => $endpoint_name) {
 											echo ('<option value="' . $endpoint . '"');
-											if ($endpoint == get_option('aws-endpoint')) {
+											if ($endpoint == get_option('wpro-aws-endpoint')) {
 												echo(' selected="selected"');
 											}
 											echo ('>' . $endpoint_name . '</option>');
@@ -233,7 +244,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 			while (is_dir($this->upload_basedir)) $this->upload_basedir = $this->tempdir . 'wpro' . time() . rand(0, 999999);
 		}
 		$data['basedir'] = $this->upload_basedir;
-		$data['baseurl'] = 'http://' . get_option('aws-bucket');
+		$data['baseurl'] = 'http://' . get_option('wpro-aws-bucket');
 		$data['path'] = $this->upload_basedir . $data['subdir'];
 		$data['url'] = $data['baseurl'] . $data['subdir'];
 		if (!is_dir($data['path'])) @mkdir($data['path'], 0777, true);
@@ -321,7 +332,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 				return false;
 		}
 
-		return $this->backend->upload($tmpfile, 'http://' . get_option('aws-bucket') . $filename, $mime_type);
+		return $this->backend->upload($tmpfile, 'http://' . get_option('wpro-aws-bucket') . $filename, $mime_type);
 	}
 
 	function upload_bits($data) {
