@@ -10,6 +10,7 @@ License: Beerware / Kopimi
  */
 
 require_once('S3.php');
+//define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
 
@@ -19,12 +20,19 @@ new WordpressReadOnly;
 
 class WordpressReadOnlyGeneric {
 
+	public $temporaryLocalData = array();
+
 	function debug($msg) {
 		if (defined('WPRO_DEBUG') && WPRO_DEBUG) {
 			$fh = fopen('/tmp/wpro-debug', 'a');
 			fwrite($fh, trim($msg) . "\n");
 			fclose($fh);
 		}
+	}
+
+	function removeTemporaryLocalData($file) {
+		$this->debug('WordpressReadOnlyGeneric::removeTemporaryLocalData("' . $file . '");');
+		$this->temporaryLocalData[] = $file;
 	}
 
 	function url_normalizer($url) {
@@ -85,6 +93,7 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 		));
 		$result = trim(curl_exec($ch));
 
+		$this->removeTemporaryLocalData($file);
 		if ($result == 'OK') return true;
 
 		echo('ERROR! Klandestino CDN Says: ' . $result . '<br />');
@@ -150,6 +159,7 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		if (!file_exists($file)) return false;
 
 		$r = $this->s3->putObject($this->s3->inputFile($file, false, $mime), $this->bucket, $url, S3::ACL_PUBLIC_READ);
+		$this->removeTemporaryLocalData($file);
 
 		return $r;
 	}
@@ -186,6 +196,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 		add_filter('wp_save_image_file', array($this, 'save_image_file'), 10, 5); // Store image file.
 		add_filter('wp_upload_bits', array($this, 'upload_bits')); // On XMLRPC uploads, files arrives as strings, which we are handling in this filter.
 		add_filter('wp_handle_upload_prefilter', array($this, 'handle_upload_prefilter')); // This is where we check for filename dupes (and change them to avoid overwrites).
+		add_filter('shutdown', array($this, 'shutdown'));
 
 		switch (get_option('wpro-service')) {
 		case 'klandestino':
@@ -350,6 +361,10 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 
 	function handle_upload($data) {
 
+		$this->debug('WordpressReadOnly::handle_upload($data);');
+		$this->debug('-> $data = ');
+		$this->debug(print_r($data, true));
+
 		$data['url'] = $this->url_normalizer($data['url']);
 
 		if (!file_exists($data['file'])) return false;
@@ -362,6 +377,10 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 
 	public $upload_basedir = ''; // Variable for caching in the upload_dir()-method
 	function upload_dir($data) {
+//		$this->debug('WordpressReadOnly::upload_dir($data);');
+//		$this->debug('-> $data = ');
+//		$this->debug(print_r($data, true));
+
 		if ($this->upload_basedir == '') {
 			$this->upload_basedir = $this->tempdir . 'wpro' . time() . rand(0, 999999);
 			while (is_dir($this->upload_basedir)) $this->upload_basedir = $this->tempdir . 'wpro' . time() . rand(0, 999999);
@@ -377,6 +396,9 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 		$data['path'] = $this->upload_basedir . $data['subdir'];
 		$data['url'] = $data['baseurl'] . $data['subdir'];
 //		if (!is_dir($data['path'])) @mkdir($data['path'], 0777, true);
+
+//		$this->debug('-> RETURNS = ');
+//		$this->debug(print_r($data, true));
 
 		return $data;
 	}
@@ -410,6 +432,9 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 	}
 
 	function load_image_to_edit_path($filepath) {
+
+		$this->debug('WordpressReadOnly::load_image_to_edit_path("' . $filepath . '");');
+
 		if (substr($filepath, 0, 7) == 'http://') {
 
 			$ending = '';
@@ -419,6 +444,9 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 			while (file_exists($tmpfile)) $tmpfile = $this->tempdir . 'wpro' . time() . rand(0, 999999) . $ending;
 
 			$filepath = $this->url_normalizer($filepath);
+
+			$this->debug('-> Loading file from: ' . $filepath);
+			$this->debug('-> Storing file at: ' . $tmpfile);
 
 			$ch = curl_init();
 			curl_setopt($ch, CURLOPT_URL, $filepath);
@@ -430,6 +458,8 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 			fwrite($fh, curl_exec($ch));
 			fclose($fh);
 
+			$this->removeTemporaryLocalData($tmpfile);
+
 			return $tmpfile;
 
 		}
@@ -437,6 +467,8 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 	}
 
 	function save_image_file($dummy, $filename, $image, $mime_type, $post_id) {
+
+		$this->debug('WordpressReadOnly::save_image_file("' . $dummy . '", "' . $filename . '", "' . $image . '", "' . $mime_type . '", "' . $post_id . '");');
 
 		if (substr($filename, 0, strlen($this->tempdir)) != $this->tempdir) return false;
 		$filename = substr($filename, strlen($this->tempdir));
@@ -446,6 +478,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 
 		$tmpfile = $this->tempdir . 'wpro' . time() . rand(0, 999999);
 		while (file_exists($tmpfile)) $tmpfile = $this->tempdir . 'wpro' . time() . rand(0, 999999);
+		$this->debug('-> Storing image as temporary file: ' . $tmpfile);
 
 		switch ($mime_type) {
 			case 'image/jpeg':
@@ -461,10 +494,20 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 				return false;
 		}
 
-		return $this->backend->upload($tmpfile, $this->url_normalizer($upload['baseurl'] . '/' . $filename), $mime_type);
+		$upload = wp_upload_dir();
+		$url = $upload['baseurl'];
+		if (substr($url, -1) != '/') $url .= '/';
+		while (substr($filename, 0, 1) == '/') $filename = substr($filename, 1);
+		$url .= $filename;
+
+		return $this->backend->upload($tmpfile, $this->url_normalizer($url), $mime_type);
 	}
 
 	function upload_bits($data) {
+
+		$this->debug('WordpressReadOnly::upload_bits($data);');
+		$this->debug('-> $data = ');
+		$this->debug(print_r($data, true));
 
 		$ending = '';
 		if (preg_match('/\.([^\.\/]+)$/', $data['name'], $regs)) $ending = '.' . $regs[1];
@@ -489,6 +532,10 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 	// Wordpress never calls the wp_handle_upload_overrides filter properly, so we do not have any good way of setting a callback for wp_unique_filename_callback, which would be the most beautiful way of doing this. So, instead we are usting the wp_handle_upload_prefilter to check for duplicates and rename the files...
 	function handle_upload_prefilter($file) {
 
+		$this->debug('WordpressReadOnly::handle_upload_prefilter($file);');
+		$this->debug('-> $file = ');
+		$this->debug(print_r($file, true));
+
 		$upload = wp_upload_dir();
 
 		$name = $file['name'];
@@ -510,6 +557,45 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 		$file['name'] = $name;
 
 		return $file;
+	}
+
+	function shutdown() {
+		$this->debug('WordpressReadOnly::shutdown()');
+
+		$this->temporaryLocalData = array_merge($this->temporaryLocalData, $this->backend->temporaryLocalData);
+
+		$this->debug('-> $this->temporaryLocalData = ');
+		$this->debug(print_r($this->temporaryLocalData, true));
+
+		$tempdir = sys_get_temp_dir();
+		if (substr($tempdir, -1) == '/') $tempdir = substr($tempdir, 0, -1);
+
+		foreach ($this->temporaryLocalData as $file) {
+
+			if (substr($file, 0, strlen($tempdir) + 1) == $tempdir . '/') {
+
+				while ($file != $tempdir) {
+					if (substr($file, -1) == '/') {
+						$file = substr($file, 0, -1);
+					} else {
+						if (is_file($file)) {
+							if (@unlink($file) == false) break;
+							$this->debug('-> Removed file: ' . $file);
+						} else if (is_dir($file)) {
+							if (@rmdir($file) == false) break;
+							$this->debug('-> Removed directory: ' . $file);
+						} else {
+							break;
+						}
+						if (preg_match('/^(.+)\/[^\/]+$/', $file, $regs)) {
+							$file = $regs[1];
+						} else {
+							break;
+						}
+					}
+				}
+			}
+		}
 	}
 
 }
