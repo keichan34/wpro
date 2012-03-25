@@ -20,11 +20,11 @@ new WordpressReadOnly;
 class WordpressReadOnlyGeneric {
 
 	function debug($msg) {
-		#if (defined('WPRO_DEBUG') && WPRO_DEBUG) {
+		if (defined('WPRO_DEBUG') && WPRO_DEBUG) {
 			$fh = fopen('/tmp/wpro-debug', 'a');
 			fwrite($fh, trim($msg) . "\n");
 			fclose($fh);
-		#}
+		}
 	}
 
 	function url_normalizer($url) {
@@ -96,10 +96,13 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 
 		$this->debug('WordpressReadOnlyKlandestino::file_exists("' . $path . '");');
 
-		$upload_dir = wp_upload_dir();
-		$path = $this->url_normalizer(str_replace('//', '/', $upload_dir['baseurl'] . $path));
+		$path = $this->url_normalizer($path);
 
 		$this->debug('-> testing url: ' . $path);
+
+		// If at this point, the testing url is not a full http url,
+		// then there is something wrong in the wp_upload_dir functionality,
+		// because of write permission errors to the system tmp or any thing else.
 
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_NOBODY, 1);
@@ -373,7 +376,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 		}
 		$data['path'] = $this->upload_basedir . $data['subdir'];
 		$data['url'] = $data['baseurl'] . $data['subdir'];
-		if (!is_dir($data['path'])) @mkdir($data['path'], 0777, true);
+//		if (!is_dir($data['path'])) @mkdir($data['path'], 0777, true);
 
 		return $data;
 	}
