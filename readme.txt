@@ -43,6 +43,10 @@ It will probably not work out-of-the-box for Wordpress MU.
 
 == Frequently Asked Questions ==
 
+= Will this plugin work in Wordpress MU environments? =
+
+Probably not, but we are not sure. Input and/or code is very welcome!
+
 = Where do I report bugs? = 
 
 Report any issues at the github issue tracker:
@@ -52,6 +56,11 @@ https://github.com/alfreddatakillen/wpro/issues
 
 At github:
 https://github.com/alfreddatakillen/wpro
+
+= What should I think of when digging the code? =
+
+If you define the constant WPRO_DEBUG in your wp-config.php, then
+some debug data will be written to /tmp/wpro-debug
 
 = What about the license? =
 

@@ -19,6 +19,14 @@ new WordpressReadOnly;
 
 class WordpressReadOnlyGeneric {
 
+	function debug($msg) {
+		#if (defined('WPRO_DEBUG') && WPRO_DEBUG) {
+			$fh = fopen('/tmp/wpro-debug', 'a');
+			fwrite($fh, trim($msg) . "\n");
+			fclose($fh);
+		#}
+	}
+
 	function url_normalizer($url) {
 		if (strpos($url, '%') !== false) return $url;
 		$url = explode('/', $url);
@@ -56,6 +64,8 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 
 	function upload($file, $fullurl, $mime) {
 
+		$this->debug('WordpressReadOnlyKlandestino::upload("' . $file . '", "' . $fullurl . '", "' . $mime . '");');
+
 		$fullurl = $this->url_normalizer($fullurl);
 
 		if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $fullurl, $regs)) return false;
@@ -77,11 +87,19 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 
 		if ($result == 'OK') return true;
 
+		echo('ERROR! Klandestino CDN Says: ' . $result . '<br />');
+
 		return false;
 	}
 
 	function file_exists($path) {
-		$path = $this->url_normalizer($path);
+
+		$this->debug('WordpressReadOnlyKlandestino::file_exists("' . $path . '");');
+
+		$upload_dir = wp_upload_dir();
+		$path = $this->url_normalizer(str_replace('//', '/', $upload_dir['baseurl'] . $path));
+
+		$this->debug('-> testing url: ' . $path);
 
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_NOBODY, 1);
@@ -89,8 +107,9 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 		$result = trim(curl_exec($ch));
 
 		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$this->debug('-> http return code: ' . $httpCode);
 
-		if ($httpCode == 404) return false;
+		if ($httpCode != 200) return false;
 
 		return true;
 	}
@@ -116,6 +135,9 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 	}
 
 	function upload($file, $fullurl, $mime) {
+
+		$this->debug('WordpressReadOnlyS3::upload("' . $file . '", "' . $fullurl . '", "' . $mime . '");');
+
 		$fullurl = $this->url_normalizer($fullurl);
 
 		if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $fullurl, $regs)) return false;
@@ -130,13 +152,11 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 	}
 
 	function file_exists($path) {
+
+		$this->debug('WordpressReadOnlyS3::file_exists("' . $path . '");');
+
 		$path = $this->url_normalizer($path);
 		$r = $this->s3->getObjectInfo($this->bucket, $path);
-
-		$fh = fopen('/tmp/log', 'a');
-		fwrite($fh, $path . "\n");
-		fwrite($fh, print_r($r, true) . "\n");
-		fclose($fh);
 
 		if (is_array($r)) return true;
 		return false;
@@ -438,7 +458,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 				return false;
 		}
 
-		return $this->backend->upload($tmpfile, 'http://' . get_option('wpro-aws-bucket') . $filename, $mime_type);
+		return $this->backend->upload($tmpfile, $this->url_normalizer($upload['baseurl'] . '/' . $filename), $mime_type);
 	}
 
 	function upload_bits($data) {
@@ -465,11 +485,6 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 	// Handle duplicate filenames:
 	// Wordpress never calls the wp_handle_upload_overrides filter properly, so we do not have any good way of setting a callback for wp_unique_filename_callback, which would be the most beautiful way of doing this. So, instead we are usting the wp_handle_upload_prefilter to check for duplicates and rename the files...
 	function handle_upload_prefilter($file) {
-
-		$fh = fopen('/tmp/log', 'a');
-		fwrite($fh, print_r($file, true));
-		fwrite($fh, print_r($_POST, true));
-		fclose($fh);
 
 		$upload = wp_upload_dir();
 
