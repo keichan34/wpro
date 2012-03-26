@@ -10,7 +10,7 @@ License: Beerware / Kopimi
  */
 
 require_once('S3.php');
-//define('WPRO_DEBUG', true);
+define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
 
@@ -167,6 +167,12 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 	function file_exists($path) {
 
 		$this->debug('WordpressReadOnlyS3::file_exists("' . $path . '");');
+
+		if (preg_match('/^http:\/\/[^\/]+\/(.+)$/', $path, $regs)) {
+			$path = $regs[1];
+		}
+
+		$this->debug('-> Checking path: ' . $path);
 
 		$path = $this->url_normalizer($path);
 		$r = $this->s3->getObjectInfo($this->bucket, $path);
@@ -391,11 +397,14 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 			$data['baseurl'] = 'http://' . trim(str_replace('//', '/', 'cdn.klandestino.se/' . get_option('wpro-klandestino-name') . '/' . trim(get_option('wpro-folder'))), '/');
 			break;
 		default:
-			$data['baseurl'] = 'http://' . trim(str_replace('//', '/', get_option('wpro-aws-bucket') . '/' . trim(get_option('wpro-folder'))), '/');
+			if (get_option('wpro-aws-virthost')) {
+				$data['baseurl'] = 'http://' . trim(str_replace('//', '/', get_option('wpro-aws-bucket') . '/' . trim(get_option('wpro-folder'))), '/');
+			} else {
+				$data['baseurl'] = 'http://' . trim(str_replace('//', '/', get_option('wpro-aws-bucket') . '.s3.amazonaws.com/' . trim(get_option('wpro-folder'))), '/');
+			}
 		}
 		$data['path'] = $this->upload_basedir . $data['subdir'];
 		$data['url'] = $data['baseurl'] . $data['subdir'];
-//		if (!is_dir($data['path'])) @mkdir($data['path'], 0777, true);
 
 //		$this->debug('-> RETURNS = ');
 //		$this->debug(print_r($data, true));
