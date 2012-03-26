@@ -10,7 +10,7 @@ License: Beerware / Kopimi
  */
 
 require_once('S3.php');
-define('WPRO_DEBUG', true);
+// define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
 
