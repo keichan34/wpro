@@ -1,12 +1,12 @@
 <?php
 /**
 Plugin Name: Wordpress Read-Only
-Plugin URI: http://klandestino.se/
-Description: Plugin for binaries (images, media, uploads) on read-only Wordpress installations. Amazon S3 is used as binary backend.
-Version: 0.1
-Author: Alfred
-Author URI: http://klandestino.se/
-License: Beerware / Kopimi  
+Plugin URI: http://wordpress.org/extend/plugins/wpro/
+Description: Plugin for running your Wordpress site without Write Access to the web directory. Amazon S3 is used for uploads/binary storage. This plugin was made with cluster/load balancing server setups in mind - where you do not want your WordPress to write anything to the local web directory.
+Version: 1.0
+Author: alfreddatakillen
+Author URI: http://nurd.nu/
+License: GPLv2
  */
 
 require_once('S3.php');
