@@ -9,7 +9,6 @@ Author URI: http://nurd.nu/
 License: GPLv2
  */
 
-require_once('S3.php');
 // define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
@@ -130,8 +129,6 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 
 class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 
-	public $s3;
-
 	public $key;
 	public $secret;
 	public $bucket;
@@ -142,26 +139,51 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		$this->secret = get_option('wpro-aws-secret');
 		$this->bucket = get_option('wpro-aws-bucket');
 		$this->endpoint = get_option('wpro-aws-endpoint');
-
-		$this->s3 = new S3(get_option('wpro-aws-key'), get_option('wpro-aws-secret'), false, get_option('wpro-aws-endpoint'));
 	}
 
 	function upload($file, $fullurl, $mime) {
-
 		$this->debug('WordpressReadOnlyS3::upload("' . $file . '", "' . $fullurl . '", "' . $mime . '");');
-
 		$fullurl = $this->url_normalizer($fullurl);
-
 		if (!preg_match('/^http:\/\/([^\/]+)\/(.*)$/', $fullurl, $regs)) return false;
-
 		$url = $regs[2];
 
 		if (!file_exists($file)) return false;
-
-		$r = $this->s3->putObject($this->s3->inputFile($file, false, $mime), $this->bucket, $url, S3::ACL_PUBLIC_READ);
 		$this->removeTemporaryLocalData($file);
 
-		return $r;
+		$fin = fopen($file, 'r');
+		if (!$fin) return false;
+
+		$fout = fsockopen($this->endpoint, 80, $errno, $errstr, 30);
+		if (!$fout) return false;
+		$datetime = gmdate('r');
+		$string2sign = "PUT\n\n" . $mime . "\n" . $datetime . "\nx-amz-acl:public-read\n/" . $this->bucket . "/" . $url;
+		$query = "PUT /" . $this->bucket . "/" . $url . " HTTP/1.1\n";
+		$query .= "Host: " . $this->endpoint . "\n";
+		$query .= "x-amz-acl: public-read\n";
+		$query .= "Connection: keep-alive\n";
+		$query .= "Content-Type: " . $mime . "\n";
+		$query .= "Content-Length: " . filesize($file) . "\n";
+		$query .= "Date: " . $datetime . "\n";
+		$query .= "Authorization: AWS " . $this->key . ":" . $this->amazon_hmac($string2sign) . "\n\n";
+
+		fwrite($fout, $query);
+		while (feof($fin) === false) fwrite($fout, fread($fin, 8192));
+		fclose($fin);
+
+		// Get the amazon response:
+		$response = '';
+		while (!feof($fout)) {
+			$response .= fgets($fp, 256);
+			if (strpos($r, "\r\n\r\n") !== false) { // Header fully returned.
+				if (strpos($r, 'Content-Length: 0') !== false) break; // Return if Content-Length: 0 (and header is fully returned)
+				if (substr($r, -7) == "\r\n0\r\n\r\n") break; // Keep-alive responses does not return EOF, they end with this string.
+		}
+	
+		fclose($fout);
+
+		if (strpos($resp, '<Error>') !== false) return false;
+
+		return true;
 	}
 
 	function file_exists($path) {
@@ -175,7 +197,8 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		$this->debug('-> Checking path: ' . $path);
 
 		$path = $this->url_normalizer($path);
-		$r = $this->s3->getObjectInfo($this->bucket, $path);
+		//$r = $this->s3->getObjectInfo($this->bucket, $path);
+		$r = false;
 
 		if (is_array($r)) return true;
 		return false;
