@@ -315,7 +315,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 							<th><label>Storage Service</label></th>
 							<td>
 								<input name="wpro-service" id="wpro-service-s3" type="radio" value="s3" <?php if ($wproService != 'klandestino') echo ('checked="checked"'); ?>/> <label for="wpro-service-s3">Amazon S3</label><br />
-								<input name="wpro-service" id="wpro-service-klandestino" type="radio" value="klandestino" <?php if ($wproService == 'klandestino') echo ('checked="checked"'); ?>/> <label for="wpro-service-klandestino">Klandestino CDN</label><br />
+<!--								<input name="wpro-service" id="wpro-service-klandestino" type="radio" value="klandestino" <?php if ($wproService == 'klandestino') echo ('checked="checked"'); ?>/> <label for="wpro-service-klandestino">Klandestino CDN</label><br />-->
 							</td>
 						</tr>
 						<tr>
