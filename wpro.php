@@ -9,7 +9,7 @@ Author URI: http://nurd.nu/
 License: GPLv2
  */
 
-// define('WPRO_DEBUG', true);
+define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
 
@@ -53,8 +53,32 @@ class WordpressReadOnlyBackend extends WordpressReadOnlyGeneric {
 		return false;
 	}
 
-	function file_exists($url) {
-		return false;
+	function file_exists($path) {
+
+		$this->debug('WordpressReadOnlyBackend::file_exists("' . $path . '");');
+
+		$path = $this->url_normalizer($path);
+
+		$this->debug('-> testing url: ' . $path);
+
+		// If at this point, the testing url is not a full http url,
+		// then there is something wrong in the wp_upload_dir functionality,
+		// because of write permission errors to the system tmp or any thing else.
+
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_NOBODY, 1);
+		curl_setopt($ch, CURLOPT_URL, $path);
+		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		$result = trim(curl_exec($ch));
+
+		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$this->debug('-> http return code: ' . $httpCode);
+
+		if ($httpCode > 300)
+
+		if ($httpCode != 200) return false;
+
+		return true;
 	}
 
 }
@@ -100,31 +124,6 @@ class WordpressReadOnlyKlandestino extends WordpressReadOnlyBackend {
 		return false;
 	}
 
-	function file_exists($path) {
-
-		$this->debug('WordpressReadOnlyKlandestino::file_exists("' . $path . '");');
-
-		$path = $this->url_normalizer($path);
-
-		$this->debug('-> testing url: ' . $path);
-
-		// If at this point, the testing url is not a full http url,
-		// then there is something wrong in the wp_upload_dir functionality,
-		// because of write permission errors to the system tmp or any thing else.
-
-		$ch = curl_init();
-		curl_setopt($ch, CURLOPT_NOBODY, 1);
-		curl_setopt($ch, CURLOPT_URL, $path);
-		$result = trim(curl_exec($ch));
-
-		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		$this->debug('-> http return code: ' . $httpCode);
-
-		if ($httpCode != 200) return false;
-
-		return true;
-	}
-
 }
 
 class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
@@ -164,6 +163,8 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		for ($i = 0; $i < strlen($string2sign); $i++) $debug .= dechex(ord(substr($string2sign, $i, 1))) . ' ';
 		$this->debug($debug);
 
+		// Todo: Make this work with php cURL instead of fsockopen/etc..
+
 		$query = "PUT /" . $this->bucket . "/" . $url . " HTTP/1.1\n";
 		$query .= "Host: " . $this->endpoint . "\n";
 		$query .= "x-amz-acl: public-read\n";
@@ -200,25 +201,6 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		if (strpos($response, '<Error>') !== false) return false;
 
 		return true;
-	}
-
-	function file_exists($path) {
-
-		$this->debug('WordpressReadOnlyS3::file_exists("' . $path . '");');
-
-		if (preg_match('/^http:\/\/[^\/]+\/(.+)$/', $path, $regs)) {
-			$path = $regs[1];
-		}
-
-		$this->debug('-> Checking path: ' . $path);
-
-		$path = $this->url_normalizer($path);
-		//$r = $this->s3->getObjectInfo($this->bucket, $path);
-		$r = false;
-
-		if (is_array($r)) return true;
-		return false;
-
 	}
 
 	function amazon_hmac($string) {
