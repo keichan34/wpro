@@ -1,6 +1,6 @@
 <?php
 /**
-Plugin Name: Wordpress Read-Only
+Plugin Name: WP Read-Only
 Plugin URI: http://wordpress.org/extend/plugins/wpro/
 Description: Plugin for running your Wordpress site without Write Access to the web directory. Amazon S3 is used for uploads/binary storage. This plugin was made with cluster/load balancing server setups in mind - where you do not want your WordPress to write anything to the local web directory.
 Version: 1.0
@@ -306,7 +306,7 @@ class WordpressReadOnly extends WordpressReadOnlyGeneric {
 			</script>
 			<div class="wrap">
 				<div id="icon-plugins" class="icon32"><br /></div>
-				<h2>Wordpress Read-Only (WPRO)</h2>
+				<h2>WP Read-Only (WPRO)</h2>
 				<form name="wpro-settings-form" action="options.php" method="post">
 					<?php settings_fields ('wpro-settings-group'); ?>
 					<h3><?php echo __('Common Settings'); ?></h3>
