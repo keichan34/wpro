@@ -74,8 +74,6 @@ class WordpressReadOnlyBackend extends WordpressReadOnlyGeneric {
 		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		$this->debug('-> http return code: ' . $httpCode);
 
-		if ($httpCode > 300)
-
 		if ($httpCode != 200) return false;
 
 		return true;
