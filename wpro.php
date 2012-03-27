@@ -9,7 +9,7 @@ Author URI: http://nurd.nu/
 License: GPLv2
  */
 
-define('WPRO_DEBUG', true);
+// define('WPRO_DEBUG', true);
 
 new WordpressReadOnly;
 
