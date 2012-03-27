@@ -157,6 +157,13 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		if (!$fout) return false;
 		$datetime = gmdate('r');
 		$string2sign = "PUT\n\n" . $mime . "\n" . $datetime . "\nx-amz-acl:public-read\n/" . $this->bucket . "/" . $url;
+
+		$this->debug('STRING TO SIGN:');
+		$this->debug($string2sign);
+		$debug = '';
+		for ($i = 0; $i < strlen($string2sign); $i++) $debug .= dechex(ord(substr($string2sign, $i, 1))) . ' ';
+		$this->debug($debug);
+
 		$query = "PUT /" . $this->bucket . "/" . $url . " HTTP/1.1\n";
 		$query .= "Host: " . $this->endpoint . "\n";
 		$query .= "x-amz-acl: public-read\n";
@@ -166,22 +173,31 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 		$query .= "Date: " . $datetime . "\n";
 		$query .= "Authorization: AWS " . $this->key . ":" . $this->amazon_hmac($string2sign) . "\n\n";
 
+		$this->debug('SEND:');
+		$this->debug($query);
+
 		fwrite($fout, $query);
 		while (feof($fin) === false) fwrite($fout, fread($fin, 8192));
 		fclose($fin);
 
 		// Get the amazon response:
+		$this->debug('RECEIVE:');
 		$response = '';
 		while (!feof($fout)) {
-			$response .= fgets($fp, 256);
-			if (strpos($r, "\r\n\r\n") !== false) { // Header fully returned.
-				if (strpos($r, 'Content-Length: 0') !== false) break; // Return if Content-Length: 0 (and header is fully returned)
-				if (substr($r, -7) == "\r\n0\r\n\r\n") break; // Keep-alive responses does not return EOF, they end with this string.
+			$data = fgets($fout, 256);
+			$this->debug($data);
+			$response .= $data;
+			if (strpos($response, "\r\n\r\n") !== false) { // Header fully returned.
+				$this->debug('ALL RESPONSE HEADERS RECEIVED.');
+				if (strpos($response, 'Content-Length: 0') !== false) break; // Return if Content-Length: 0 (and header is fully returned)
+				if (substr($response, -7) == "\r\n0\r\n\r\n") break; // Keep-alive responses does not return EOF, they end with this string.
+			}
 		}
 	
 		fclose($fout);
 
-		if (strpos($resp, '<Error>') !== false) return false;
+
+		if (strpos($response, '<Error>') !== false) return false;
 
 		return true;
 	}
@@ -202,6 +218,15 @@ class WordpressReadOnlyS3 extends WordpressReadOnlyBackend {
 
 		if (is_array($r)) return true;
 		return false;
+
+	}
+
+	function amazon_hmac($string) {
+		return base64_encode(extension_loaded('hash') ?
+		hash_hmac('sha1', $string, $this->secret, true) : pack('H*', sha1(
+		(str_pad($this->secret, 64, chr(0x00)) ^ (str_repeat(chr(0x5c), 64))) .
+		pack('H*', sha1((str_pad($this->secret, 64, chr(0x00)) ^
+		(str_repeat(chr(0x36), 64))) . $string)))));
 	}
 
 }
